@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج حساب أحمال التبريد - Cold Store Load Calculation</title>
+    <!-- استدعاء مكتبة Tailwind CSS للتصميم الاحترافي -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- استدعاء مكتبة SheetJS لتصدير ملف الإكسيل -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- خط تجوال العربي -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .section-card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            border-top: 4px solid #2563eb;
+            position: relative;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .load-toggle {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #059669;
+            background-color: #ecfdf5;
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid #d1fae5;
+        }
+        .load-toggle input {
+            width: auto;
+            margin-left: 8px;
+            cursor: pointer;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #374151;
+            font-size: 0.95rem;
+        }
+        input[type="number"], input[type="text"], select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background-color: #f9fafb;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus {
+            border-color: #2563eb;
+            outline: none;
+            background-color: #fff;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #eff6ff;
+            color: #1e3a8a;
+        }
+        .calc-btn {
+            background-color: #2563eb;
+            color: white;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 8px;
+            width: 100%;
+            transition: background-color 0.3s;
+            cursor: pointer;
+        }
+        .calc-btn:hover {
+            background-color: #1d4ed8;
+        }
+        .excel-btn {
+            background-color: #10b981;
+            color: white;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 8px;
+            width: 100%;
+            transition: background-color 0.3s;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .excel-btn:hover {
+            background-color: #059669;
+        }
+        .result-box {
+            background-color: #1e3a8a;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        .sub-result {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding: 8px 0;
+            align-items: center;
+        }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+        .status-on { background-color: #10b981; color: white; }
+        .status-off { background-color: #ef4444; color: white; }
+        .hidden { display: none; }
+        
+        /* Checkbox styling */
+        input[type=checkbox] {
+            accent-color: #10b981;
+            width: 18px;
+            height: 18px;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-900">برنامج حساب أحمال تبريد المخازن</h1>
+            <p class="text-gray-600 mt-2">Refrigeration Load Estimator</p>
+        </header>
+
+        <form id="calcForm" onsubmit="event.preventDefault(); calculateLoads();">
+            
+            <!-- 1. General Data -->
+            <div class="section-card">
+                <h2 class="section-title">1. البيانات الأساسية (General Data)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="input-group">
+                        <label>اسم المكان (Project Name)</label>
+                        <input type="text" id="placeName" required>
+                    </div>
+                    <div class="input-group">
+                        <label>نوع الفريون (Refrigerant)</label>
+                        <input type="text" id="refrigerantType">
+                    </div>
+                    <div class="input-group">
+                        <label>T_outside (°C)</label>
+                        <input type="number" step="any" id="t_outside" required>
+                    </div>
+                    <div class="input-group">
+                        <label>T_wet bulb (°C)</label>
+                        <input type="number" step="any" id="t_wetbulb">
+                    </div>
+                    <div class="input-group">
+                        <label>T_Ground (°C)</label>
+                        <input type="number" step="any" id="t_ground" required>
+                    </div>
+                    <div class="input-group">
+                        <label>T_Room (°C)</label>
+                        <input type="number" step="any" id="t_room" required>
+                    </div>
+                    <div class="input-group">
+                        <label>حجم الغرفة بعد العزل (m³)</label>
+                        <input type="number" step="any" id="roomVolume" required>
+                    </div>
+                    <div class="input-group flex items-center mt-6">
+                        <input type="checkbox" id="isOnGround" class="w-5 h-5 ml-2" onchange="updateGroundLabel()">
+                        <label for="isOnGround" class="mb-0 cursor-pointer">هل المخزن مبني مباشرة على الأرض؟</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Product Load L1 -->
+            <div class="section-card">
+                <h2 class="section-title">
+                    2. حمل المنتج (L1 - Product Load)
+                    <div class="load-toggle">
+                        <input type="checkbox" id="check_l1" checked>
+                        <label for="check_l1" class="mb-0 cursor-pointer mr-2">حساب هذا الحمل</label>
+                    </div>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="input-group col-span-1 md:col-span-2">
+                        <label>اسم المنتج</label>
+                        <input type="text" id="productName">
+                    </div>
+                    <div class="input-group">
+                        <label>حالة المنتج</label>
+                        <select id="productStatus" onchange="updateProductInputs()">
+                            <option value="fresh_fresh">1- طازج ويحفظ طازج</option>
+                            <option value="fresh_frozen">2- طازج ويحفظ مجمد</option>
+                            <option value="frozen_frozen">3- مجمد ويحفظ مجمد</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                    <div class="input-group">
+                        <label>Cp_fresh (kJ/kg.K)</label>
+                        <input type="number" step="any" id="cp_fresh">
+                    </div>
+                    <div class="input-group">
+                        <label>Cp_frozen (kJ/kg.K)</label>
+                        <input type="number" step="any" id="cp_frozen">
+                    </div>
+                    <div class="input-group">
+                        <label>Latent Heat (kJ/kg)</label>
+                        <input type="number" step="any" id="latent_heat">
+                    </div>
+                    <div class="input-group">
+                        <label>Q_respiration (W/kg)</label>
+                        <input type="number" step="any" id="q_respiration">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="input-group">
+                        <label>Temp T_1 (°C)</label>
+                        <input type="number" step="any" id="t_1">
+                    </div>
+                    <div class="input-group">
+                        <label>Temp T_2 (°C)</label>
+                        <input type="number" step="any" id="t_2">
+                    </div>
+                    <div class="input-group">
+                        <label>Freezing Temp T_f (°C)</label>
+                        <input type="number" step="any" id="t_f">
+                    </div>
+                    <div class="input-group">
+                        <label>Time (hr)</label>
+                        <input type="number" step="any" id="time_cooling">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="input-group">
+                        <label>Rate of Occupied Volume (%)</label>
+                        <input type="number" step="any" id="rate_occupied" placeholder="e.g. 80">
+                    </div>
+                    <div class="input-group">
+                        <label>Storing Rate (%)</label>
+                        <input type="number" step="any" id="rate_storing" placeholder="e.g. 10">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Transmission Load L2 -->
+            <div class="section-card overflow-x-auto">
+                <h2 class="section-title">
+                    3. الحمل الحراري خلال الحوائط (L2)
+                    <div class="load-toggle">
+                        <input type="checkbox" id="check_l2" checked>
+                        <label for="check_l2" class="mb-0 cursor-pointer mr-2">حساب هذا الحمل</label>
+                    </div>
+                </h2>
+                <table id="l2Table">
+                    <thead>
+                        <tr>
+                            <th>Direction</th>
+                            <th>U (W/m².K)</th>
+                            <th>Area (m²)</th>
+                            <th>DT Solar (°C)</th>
+                            <th>DT Total (°C) (Auto)</th>
+                            <th>Q (W) (Auto)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows generated via JS to allow easy ID referencing -->
+                        <tr data-row="north"><td>North Wall</td><td><input type="number" step="any" class="w-20 u-val"></td><td><input type="number" step="any" class="w-20 a-val"></td><td><input type="number" step="any" class="w-20 dts-val"></td><td class="dtt-val font-bold">-</td><td class="q-val font-bold">-</td></tr>
+                        <tr data-row="south"><td>South Wall</td><td><input type="number" step="any" class="w-20 u-val"></td><td><input type="number" step="any" class="w-20 a-val"></td><td><input type="number" step="any" class="w-20 dts-val"></td><td class="dtt-val font-bold">-</td><td class="q-val font-bold">-</td></tr>
+                        <tr data-row="east"><td>East Wall</td><td><input type="number" step="any" class="w-20 u-val"></td><td><input type="number" step="any" class="w-20 a-val"></td><td><input type="number" step="any" class="w-20 dts-val"></td><td class="dtt-val font-bold">-</td><td class="q-val font-bold">-</td></tr>
+                        <tr data-row="west"><td>West Wall</td><td><input type="number" step="any" class="w-20 u-val"></td><td><input type="number" step="any" class="w-20 a-val"></td><td><input type="number" step="any" class="w-20 dts-val"></td><td class="dtt-val font-bold">-</td><td class="q-val font-bold">-</td></tr>
+                        <tr data-row="ceiling"><td>Ceiling</td><td><input type="number" step="any" class="w-20 u-val"></td><td><input type="number" step="any" class="w-20 a-val"></td><td><input type="number" step="any" class="w-20 dts-val"></td><td class="dtt-val font-bold">-</td><td class="q-val font-bold">-</td></tr>
+                        <tr data-row="floor">
+                            <td id="floorLabel">Floor</td>
+                            <td><input type="number" step="any" class="w-20 u-val" id="floor_u"></td>
+                            <td><input type="number" step="any" class="w-20 a-val" id="floor_area"></td>
+                            <td><input type="number" step="any" class="w-20 dts-val" value="0" disabled title="Usually 0 for floor"></td>
+                            <td class="dtt-val font-bold">-</td>
+                            <td class="q-val font-bold">-</td>
+                        </tr>
+                        <tr class="bg-gray-100 font-bold">
+                            <td colspan="5" class="text-right px-4">Summation Q (W):</td>
+                            <td id="sumQ">0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 4. L3 Air Change -->
+            <div class="section-card">
+                <h2 class="section-title">
+                    4. حمل تغيير الهواء (L3 - Air Change)
+                    <div class="load-toggle">
+                        <input type="checkbox" id="check_l3" checked>
+                        <label for="check_l3" class="mb-0 cursor-pointer mr-2">حساب هذا الحمل</label>
+                    </div>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="input-group"><label>Density Outside (kg/m³)</label><input type="number" step="any" id="dens_out" value="1.18"></div>
+                    <div class="input-group"><label>Air Changes per Day</label><input type="number" step="any" id="air_change_num"></div>
+                    <div class="input-group"><label>Enthalpy Outside Io (kJ/kg)</label><input type="number" step="any" id="enthalpy_out"></div>
+                    <div class="input-group"><label>Enthalpy Room IR (kJ/kg)</label><input type="number" step="any" id="enthalpy_in"></div>
+                </div>
+            </div>
+
+            <!-- 5. Other Loads (L4 - L8) -->
+            <div class="section-card">
+                <h2 class="section-title">5. الأحمال الأخرى (L4 - L8)</h2>
+                
+                <!-- L4 Respiration -->
+                <div class="flex items-center justify-between border-b pb-2 mt-2">
+                    <h3 class="font-bold text-blue-700">L4: Respiration Load</h3>
+                    <div class="load-toggle"><input type="checkbox" id="check_l4" checked><label for="check_l4" class="mb-0 cursor-pointer mr-2">حساب</label></div>
+                </div>
+                <div class="p-2 bg-gray-50 text-sm mb-4">يعتمد على Q_respiration وكتلة المنتج المدخلة في قسم (2).</div>
+
+                <!-- L5 Workers -->
+                <div class="flex items-center justify-between border-b pb-2 mt-4">
+                    <h3 class="font-bold text-blue-700">L5: Workers Load</h3>
+                    <div class="load-toggle"><input type="checkbox" id="check_l5" checked><label for="check_l5" class="mb-0 cursor-pointer mr-2">حساب</label></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                    <div class="input-group"><label>Number of Workers</label><input type="number" step="any" id="num_workers"></div>
+                    <div class="input-group"><label>Heat Gain per Person (W)</label><input type="number" step="any" id="heat_per_worker"></div>
+                    <div class="input-group"><label>Hours in Room</label><input type="number" step="any" id="worker_hours"></div>
+                </div>
+
+                <!-- L6 Lighting -->
+                <div class="flex items-center justify-between border-b pb-2 mt-4">
+                    <h3 class="font-bold text-blue-700">L6: Lighting Load</h3>
+                    <div class="load-toggle"><input type="checkbox" id="check_l6" checked><label for="check_l6" class="mb-0 cursor-pointer mr-2">حساب</label></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div class="input-group"><label>Light Intensity (W/m²)</label><input type="number" step="any" id="light_intensity"></div>
+                    <div class="input-group"><label>Operating Hours</label><input type="number" step="any" id="light_hours"></div>
+                </div>
+
+                <!-- L7 Machines -->
+                <div class="flex items-center justify-between border-b pb-2 mt-4">
+                    <h3 class="font-bold text-blue-700">L7: Machine Load</h3>
+                    <div class="load-toggle"><input type="checkbox" id="check_l7" checked><label for="check_l7" class="mb-0 cursor-pointer mr-2">حساب</label></div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 mt-2">
+                    <div class="input-group"><label>Total Machine Power (kW)</label><input type="number" step="any" id="machine_power"></div>
+                </div>
+
+                <!-- L8 Heating -->
+                <div class="flex items-center justify-between border-b pb-2 mt-4">
+                    <h3 class="font-bold text-blue-700">L8: Heating Load (Underfloor)</h3>
+                    <div class="load-toggle"><input type="checkbox" id="check_l8" checked><label for="check_l8" class="mb-0 cursor-pointer mr-2">حساب</label></div>
+                </div>
+                <div class="p-2 bg-gray-50 text-sm">يحسب تلقائياً بناءً على مساحة الأرضية وحالة التخزين، إذا تم تفعيله.</div>
+            </div>
+
+            <!-- 6. Total & RC -->
+            <div class="section-card">
+                <h2 class="section-title">6. سعة التبريد المطلوبة (Refrigeration Capacity)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="input-group"><label>Compressor Working Hours (hr)</label><input type="number" step="any" id="comp_hours" value="16"></div>
+                    <div class="input-group"><label>Safety Factor (e.g. 1.1)</label><input type="number" step="any" id="safety_factor" value="1.1"></div>
+                </div>
+            </div>
+
+            <button type="submit" class="calc-btn text-lg shadow-lg">احسب الأحمال (Calculate)</button>
+        </form>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="result-box hidden">
+            <h2 class="text-2xl font-bold border-b border-blue-400 pb-2 mb-4 text-center">النتائج النهائية (Results)</h2>
+            
+            <div class="sub-result">
+                <span>L1 (Product Load):</span> 
+                <div>
+                    <span id="badge_l1" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l1">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L2 (Transmission Load):</span> 
+                <div>
+                    <span id="badge_l2" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l2">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L3 (Air Change Load):</span> 
+                <div>
+                    <span id="badge_l3" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l3">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L4 (Respiration Load):</span> 
+                <div>
+                    <span id="badge_l4" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l4">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L5 (Worker Load):</span> 
+                <div>
+                    <span id="badge_l5" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l5">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L6 (Lighting Load):</span> 
+                <div>
+                    <span id="badge_l6" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l6">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L7 (Machine Load):</span> 
+                <div>
+                    <span id="badge_l7" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l7">0.00 kW</span>
+                </div>
+            </div>
+            <div class="sub-result">
+                <span>L8 (Heating Load):</span> 
+                <div>
+                    <span id="badge_l8" class="status-badge"></span>
+                    <span class="font-bold text-xl" id="res_l8">0.00 kW</span>
+                </div>
+            </div>
+            
+            <div class="sub-result mt-4 bg-blue-800 p-2 rounded">
+                <span>Total Load (L_TOT):</span> 
+                <span class="font-bold text-2xl" id="res_total">0.00 kW</span>
+            </div>
+            
+            <div class="sub-result mt-2 bg-green-600 p-2 rounded border-2 border-green-400">
+                <span>Refrigeration Capacity (RC):</span> 
+                <span class="font-bold text-3xl" id="res_rc">0.00 kW</span>
+            </div>
+
+            <div class="sub-result mt-2 text-sm text-gray-300">
+                <span>Tons of Refrigeration (TR):</span> 
+                <span class="font-bold" id="res_tr">0.00 TR</span>
+            </div>
+
+            <button onclick="exportToExcel()" class="excel-btn shadow-lg mt-6">
+                📄 تحميل تقرير Excel مفصل
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // Global object to store calculation details for Excel
+        let excelData = {};
+
+        function getVal(id) {
+            return parseFloat(document.getElementById(id).value) || 0;
+        }
+
+        function isChecked(id) {
+            return document.getElementById(id).checked;
+        }
+
+        function updateGroundLabel() {
+            const isGround = document.getElementById('isOnGround').checked;
+            document.getElementById('floorLabel').innerText = isGround ? "Floor (Ground)" : "Floor (Air)";
+        }
+
+        function updateProductInputs() {
+            // Optional functionality
+        }
+
+        function setBadge(id, isUsed) {
+            const badge = document.getElementById(id);
+            if (isUsed) {
+                badge.className = "status-badge status-on";
+                badge.innerText = "ON";
+            } else {
+                badge.className = "status-badge status-off";
+                badge.innerText = "OFF";
+            }
+        }
+
+        function calculateLoads() {
+            // --- General Data ---
+            const T_out = getVal('t_outside');
+            const T_in = getVal('t_room');
+            const T_ground = getVal('t_ground');
+            const Vol = getVal('roomVolume');
+            const isOnGround = document.getElementById('isOnGround').checked;
+
+            // --- 1. Product Mass & L1 ---
+            const useL1 = isChecked('check_l1');
+            const prodStatus = document.getElementById('productStatus').value;
+            const rateOcc = getVal('rate_occupied');
+            const rateStore = getVal('rate_storing');
+            
+            // Density Logic
+            let density = 0;
+            if (prodStatus === 'fresh_fresh') density = 500;
+            else density = 650;
+
+            // Mass Calculation (Always calc mass as it might be needed for L4)
+            const mass = (rateOcc / 100) * (rateStore / 100) * density * Vol;
+            
+            // L1 Calculation
+            let L1 = 0;
+            if (useL1) {
+                const time = getVal('time_cooling') || 24; 
+                const cp_fr = getVal('cp_fresh');
+                const cp_fz = getVal('cp_frozen');
+                const T1 = getVal('t_1');
+                const T2 = getVal('t_2');
+                const Tf = getVal('t_f');
+                const latent = getVal('latent_heat');
+
+                if (prodStatus === 'fresh_fresh') {
+                    L1 = (mass / (time * 3600)) * cp_fr * (T1 - T2);
+                } else if (prodStatus === 'fresh_frozen') {
+                    L1 = (mass / (time * 3600)) * (cp_fr * (T1 - Tf) + latent + cp_fz * (Tf - T2));
+                } else { // frozen_frozen
+                    L1 = (mass / (time * 3600)) * cp_fz * (T1 - T2);
+                }
+            }
+            setBadge('badge_l1', useL1);
+
+            // --- 2. L2 Transmission ---
+            const useL2 = isChecked('check_l2');
+            const rows = document.querySelectorAll('#l2Table tbody tr[data-row]');
+            let sumQ = 0;
+            let wallsData = [];
+
+            rows.forEach(row => {
+                const type = row.getAttribute('data-row');
+                const inputs = row.querySelectorAll('input');
+                const U = parseFloat(inputs[0].value) || 0;
+                const A = parseFloat(inputs[1].value) || 0;
+                const DT_solar = parseFloat(inputs[2].value) || 0;
+                
+                let DT_base = 0;
+                if (type === 'floor') {
+                    if (isOnGround) {
+                        DT_base = T_ground - T_in;
+                    } else {
+                        DT_base = T_out - T_in;
+                    }
+                } else {
+                    DT_base = T_out - T_in;
+                }
+
+                const DT_total = DT_solar + DT_base;
+                const Q = U * A * DT_total;
+                
+                row.querySelector('.dtt-val').innerText = DT_total.toFixed(2);
+                row.querySelector('.q-val').innerText = Q.toFixed(2);
+                
+                sumQ += Q;
+
+                wallsData.push({
+                    dir: row.cells[0].innerText, U, A, DT_solar, DT_total, Q
+                });
+            });
+
+            document.getElementById('sumQ').innerText = sumQ.toFixed(2);
+            let L2 = 0;
+            if (useL2) {
+                L2 = sumQ * 0.001; // Convert W to kW
+            }
+            setBadge('badge_l2', useL2);
+
+            // --- 3. L3 Air Change ---
+            const useL3 = isChecked('check_l3');
+            let L3 = 0;
+            if (useL3) {
+                const dens_out = getVal('dens_out');
+                const airChanges = getVal('air_change_num');
+                const Io = getVal('enthalpy_out');
+                const Ir = getVal('enthalpy_in');
+                L3 = dens_out * ( (Vol * airChanges) / (24 * 3600) ) * (Io - Ir);
+            }
+            setBadge('badge_l3', useL3);
+
+            // --- 4. L4 Respiration ---
+            const useL4 = isChecked('check_l4');
+            let L4 = 0;
+            if (useL4) {
+                const q_resp = getVal('q_respiration'); 
+                L4 = mass * q_resp * 0.001;
+            }
+            setBadge('badge_l4', useL4);
+
+            // --- 5. L5 Workers ---
+            const useL5 = isChecked('check_l5');
+            let L5 = 0;
+            if (useL5) {
+                const n_workers = getVal('num_workers');
+                const heat_worker = getVal('heat_per_worker');
+                const hr_worker = getVal('worker_hours');
+                L5 = n_workers * heat_worker * (hr_worker / 24) * 0.001;
+            }
+            setBadge('badge_l5', useL5);
+
+            // --- 6. L6 Lighting ---
+            const useL6 = isChecked('check_l6');
+            let L6 = 0;
+            if (useL6) {
+                const intensity = getVal('light_intensity');
+                const area_floor = getVal('floor_area'); 
+                const hr_light = getVal('light_hours');
+                L6 = intensity * area_floor * (hr_light / 24) * 0.001;
+            }
+            setBadge('badge_l6', useL6);
+
+            // --- 7. L7 Machines ---
+            const useL7 = isChecked('check_l7');
+            let L7 = 0;
+            if (useL7) {
+                const p_machine = getVal('machine_power');
+                L7 = 0.7 * p_machine;
+            }
+            setBadge('badge_l7', useL7);
+
+            // --- 8. L8 Heating ---
+            const useL8 = isChecked('check_l8');
+            let L8 = 0;
+            const area_floor = getVal('floor_area');
+            if (useL8) {
+                if (isOnGround) {
+                    if (prodStatus === 'fresh_fresh') {
+                        L8 = 0;
+                    } else {
+                         L8 = 5 * area_floor * 0.001;
+                    }
+                } else {
+                    L8 = 0; 
+                }
+            }
+            setBadge('badge_l8', useL8);
+
+            // --- Totals ---
+            const L_TOT = L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8;
+            
+            const hrs_comp = getVal('comp_hours') || 1;
+            const safety = getVal('safety_factor');
+            const RC = L_TOT * safety * (24 / hrs_comp);
+
+            // --- Display Results ---
+            document.getElementById('res_l1').innerText = L1.toFixed(3) + " kW";
+            document.getElementById('res_l2').innerText = L2.toFixed(3) + " kW";
+            document.getElementById('res_l3').innerText = L3.toFixed(3) + " kW";
+            document.getElementById('res_l4').innerText = L4.toFixed(3) + " kW";
+            document.getElementById('res_l5').innerText = L5.toFixed(3) + " kW";
+            document.getElementById('res_l6').innerText = L6.toFixed(3) + " kW";
+            document.getElementById('res_l7').innerText = L7.toFixed(3) + " kW";
+            document.getElementById('res_l8').innerText = L8.toFixed(3) + " kW";
+            document.getElementById('res_total').innerText = L_TOT.toFixed(3) + " kW";
+            document.getElementById('res_rc').innerText = RC.toFixed(3) + " kW";
+            document.getElementById('res_tr').innerText = (RC / 3.517).toFixed(3) + " TR";
+            
+            document.getElementById('resultsSection').classList.remove('hidden');
+
+            // --- Prepare Data for Excel ---
+            excelData = {
+                inputs: {
+                    name: document.getElementById('placeName').value,
+                    ref: document.getElementById('refrigerantType').value,
+                    tout: T_out, tin: T_in, twet: getVal('t_wetbulb'), tground: T_ground,
+                    vol: Vol, isGround: isOnGround ? "Yes" : "No",
+                    prodName: document.getElementById('productName').value,
+                    prodType: document.getElementById('productStatus').options[document.getElementById('productStatus').selectedIndex].text,
+                    mass: mass.toFixed(2),
+                    density: density
+                },
+                loads: { L1, L2, L3, L4, L5, L6, L7, L8 },
+                usage: { L1: useL1, L2: useL2, L3: useL3, L4: useL4, L5: useL5, L6: useL6, L7: useL7, L8: useL8 },
+                walls: wallsData,
+                total: { L_TOT, RC, Safety: safety, RunHours: hrs_comp }
+            };
+        }
+
+        function exportToExcel() {
+            if (!excelData.inputs) {
+                alert("Please calculate first!");
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+            
+            // --- Create Data Array for Sheet ---
+            let data = [];
+            
+            // Header
+            data.push(["Cold Store Calculation Report / تقرير أحمال التبريد"]);
+            data.push(["Date:", new Date().toLocaleDateString()]);
+            data.push([""]);
+
+            // General Info
+            data.push(["1. General Data / البيانات الأساسية"]);
+            data.push(["Project Name", excelData.inputs.name]);
+            data.push(["Refrigerant", excelData.inputs.ref]);
+            data.push(["Volume (m³)", excelData.inputs.vol, "Is on Ground?", excelData.inputs.isGround]);
+            data.push(["T Outside (°C)", excelData.inputs.tout, "T Room (°C)", excelData.inputs.tin]);
+            data.push(["T Ground (°C)", excelData.inputs.tground, "T Wet Bulb", excelData.inputs.twet]);
+            data.push([""]);
+
+            // Product Data
+            data.push(["2. Product Data & Mass Calculation"]);
+            data.push(["Product Name", excelData.inputs.prodName]);
+            data.push(["Status", excelData.inputs.prodType]);
+            data.push(["Calculated Mass (kg)", excelData.inputs.mass, "Density Used", excelData.inputs.density]);
+            data.push([""]);
+
+            // Walls Table (L2)
+            data.push(["3. Transmission Load (L2) Details"]);
+            data.push(["Direction", "U (W/m².K)", "Area (m²)", "DT Solar", "DT Total", "Q (W)"]);
+            excelData.walls.forEach(w => {
+                data.push([w.dir, w.U, w.A, w.DT_solar, w.DT_total.toFixed(2), w.Q.toFixed(2)]);
+            });
+            data.push(["Total Q (W)", "", "", "", "", (excelData.loads.L2 * 1000).toFixed(2)]);
+            data.push(["L2 (kW)", excelData.loads.L2.toFixed(4), "Included?", excelData.usage.L2 ? "Yes" : "No"]);
+            data.push([""]);
+
+            // Summary of Loads
+            data.push(["4. Loads Summary / ملخص الأحمال"]);
+            data.push(["Load Item", "Value (kW)", "Included in Total?", "Description"]);
+            data.push(["L1 (Product)", excelData.loads.L1.toFixed(4), excelData.usage.L1 ? "Yes" : "No", "Pull down load"]);
+            data.push(["L2 (Transmission)", excelData.loads.L2.toFixed(4), excelData.usage.L2 ? "Yes" : "No", "Walls/Ceiling/Floor"]);
+            data.push(["L3 (Air Change)", excelData.loads.L3.toFixed(4), excelData.usage.L3 ? "Yes" : "No", "Infiltration"]);
+            data.push(["L4 (Respiration)", excelData.loads.L4.toFixed(4), excelData.usage.L4 ? "Yes" : "No", "Product breathing"]);
+            data.push(["L5 (Workers)", excelData.loads.L5.toFixed(4), excelData.usage.L5 ? "Yes" : "No", "Occupancy"]);
+            data.push(["L6 (Lighting)", excelData.loads.L6.toFixed(4), excelData.usage.L6 ? "Yes" : "No", "Lights"]);
+            data.push(["L7 (Machines)", excelData.loads.L7.toFixed(4), excelData.usage.L7 ? "Yes" : "No", "Evap fans/Equipment"]);
+            data.push(["L8 (Heating)", excelData.loads.L8.toFixed(4), excelData.usage.L8 ? "Yes" : "No", "Underfloor heating"]);
+            data.push([""]);
+            
+            // Final Results
+            data.push(["5. Sizing Results / النتائج النهائية"]);
+            data.push(["Total Load (L_TOT)", excelData.total.L_TOT.toFixed(4) + " kW"]);
+            data.push(["Safety Factor", excelData.total.Safety]);
+            data.push(["Compressor Runtime", excelData.total.RunHours + " hours/day"]);
+            data.push(["Required Capacity (RC)", excelData.total.RC.toFixed(4) + " kW"]);
+            data.push(["In Tons (TR)", (excelData.total.RC / 3.517).toFixed(4) + " TR"]);
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // Formatting Column Widths (Basic)
+            ws['!cols'] = [{wch:25}, {wch:15}, {wch:15}, {wch:25}, {wch:25}, {wch:15}];
+
+            XLSX.utils.book_append_sheet(wb, ws, "Calculation Report");
+            XLSX.writeFile(wb, "Cooling_Load_Report.xlsx");
+        }
+    </script>
+</body>
+</html>
